@@ -23,7 +23,7 @@ const routes = require("./routes");
 app.use(express.json());
 app.use(routes);
 
-//if requests are sent ot wherever our server is running then run userRouter
+//if requests are sent ot wherever our server is running then run mainRouter
 app.use("/", mainRouter);
 
 app.listen(PORT, () => {
