@@ -12,8 +12,18 @@ mongoose
   })
   .catch(console.error);
 
-//if requests are sent ot wherever our server is running then run userRouter
+app.use((req, res, next) => {
+  req.user = {
+    _id: "66269407852f90c7ef268200",
+  };
+  next();
+});
+
+const routes = require("./routes");
 app.use(express.json());
+app.use(routes);
+
+//if requests are sent ot wherever our server is running then run userRouter
 app.use("/", mainRouter);
 
 app.listen(PORT, () => {
