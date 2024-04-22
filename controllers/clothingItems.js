@@ -28,6 +28,7 @@ const getItems = (req, res) => {
   ClothingItem.find({})
     .then((items) => res.status(REQUEST_SUCCESSFUL).send(items))
     .catch((err) => {
+      console.error(err);
       res
         .status(SERVER_ERROR)
         .send({ message: "An error has occured on the server." });

@@ -1,8 +1,10 @@
 const express = require("express");
+
 const mongoose = require("mongoose");
 const mainRouter = require("./routes/index");
 
 const app = express();
+
 const { PORT = 3001 } = process.env;
 
 mongoose
@@ -20,10 +22,10 @@ app.use((req, res, next) => {
 });
 
 const routes = require("./routes");
+
 app.use(express.json());
 app.use(routes);
 
-//if requests are sent ot wherever our server is running then run mainRouter
 app.use("/", mainRouter);
 
 app.listen(PORT, () => {
