@@ -21,7 +21,6 @@ app.use((req, res, next) => {
   next();
 });
 
-const routes = require("./routes");
 
 app.use(express.json());
 

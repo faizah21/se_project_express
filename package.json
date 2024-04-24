@@ -3,6 +3,11 @@
   "version": "1.0.0",
   "description": "Bootcamp project utilizing Express",
   "main": "app.js",
+  "dependencies": {
+    "express": "^4.19.2",
+    "mongoose": "^6.6.1",
+    "validator": "^13.11.0"
+  },
   "scripts": {
     "lint": "npx eslint .",
     "start": "node app.js",
