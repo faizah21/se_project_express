@@ -5,23 +5,11 @@ const {
   INVALID_DATA,
   NOT_FOUND,
   SERVER_ERROR,
-  REQUEST_SUCCESSFUL,
   UNAUTHORIZED_ERROR,
   HTTP_USER_DUPLICATED,
 } = require("../utils/errors");
 
 const { JWT_SECRET } = require("../utils/config");
-
-const getUsers = (req, res) => {
-  User.find({})
-    .then((users) => res.status(REQUEST_SUCCESSFUL).send(users))
-    .catch((err) => {
-      console.error(err);
-      return res
-        .status(SERVER_ERROR)
-        .send({ message: "An error has occurred at getUsers" });
-    });
-};
 
 const createUser = (req, res) => {
   const { name, avatar, email, password } = req.body;
@@ -77,11 +65,6 @@ const loginUser = (req, res) => {
     .catch((err) => {
       // otherwise, we get an error
       console.error(err);
-      if (err.name === "ValidationError") {
-        return res
-          .status(INVALID_DATA)
-          .send({ message: "Invalid credentials" });
-      }
       if (err.message === "Incorrect email or password") {
         return res
           .status(UNAUTHORIZED_ERROR)
@@ -90,27 +73,6 @@ const loginUser = (req, res) => {
       return res
         .status(SERVER_ERROR)
         .send({ message: "An error has occurred on the server" });
-    });
-};
-
-const getUser = (req, res) => {
-  const { userId } = req.params;
-  User.findById(userId)
-    .orFail()
-    .then((user) => {
-      res.status(REQUEST_SUCCESSFUL).send(user);
-    })
-    .catch((err) => {
-      console.error(err);
-      if (err.name === "DocumentNotFoundError") {
-        return res.status(NOT_FOUND).send({ message: err.message });
-      }
-      if (err.name === "CastError") {
-        return res.status(INVALID_DATA).send({ message: "Invalid data" });
-      }
-      return res
-        .status(SERVER_ERROR)
-        .send({ message: "An error has occurred on the server." });
     });
 };
 
@@ -161,9 +123,7 @@ const updateUser = (req, res) => {
 };
 
 module.exports = {
-  getUsers,
   createUser,
-  getUser,
   loginUser,
   getCurrentUser,
   updateUser,
