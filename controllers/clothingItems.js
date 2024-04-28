@@ -5,6 +5,7 @@ const {
   SERVER_ERROR,
   REQUEST_SUCCESSFUL,
   REQUEST_CREATED,
+  FORBIDDEN_ERROR,
 } = require("../utils/errors");
 
 const createItem = (req, res) => {
@@ -35,14 +36,21 @@ const getItems = (req, res) => {
     });
 };
 
-
-
 const deleteItem = (req, res) => {
   const { itemId } = req.params;
   console.log(itemId);
-  ClothingItem.deleteOne({ _id: itemId })
+  ClothingItem.findById({ _id: itemId })
     .orFail()
-    .then((item) => res.status(REQUEST_SUCCESSFUL).send(item))
+    .then((item) => {
+      if (item.owner.toString() !== req.user._id.toString()) {
+        return res.status(FORBIDDEN_ERROR).send({
+          message: "You do not have sufficient privileges delete this item.",
+        });
+      }
+      return ClothingItem.findByIdAndDelete({ _id: itemId })
+        .orFail()
+        .then(() => res.status(200).send(item));
+    })
     .catch((err) => {
       console.error(err);
       if (err.name === "DocumentNotFoundError") {
