@@ -1,123 +1,112 @@
-const ClothingItem = require("../models/clothingItem");
-const {
-  INVALID_DATA,
-  NOT_FOUND,
-  SERVER_ERROR,
-  REQUEST_SUCCESSFUL,
-  REQUEST_CREATED,
-  FORBIDDEN_ERROR,
-} = require("../utils/errors");
+const bcrypt = require("bcryptjs");
 
-const createItem = (req, res) => {
-  const { name, weather, imageUrl } = req.body;
+const jwt = require("jsonwebtoken");
 
-  ClothingItem.create({ name, weather, imageUrl, owner: req.user._id })
-    .then((item) => {
-      res.status(REQUEST_CREATED).send(item);
+const JWT_SECRET = require("../utils/config");
+
+const DuplicateEmailError = require("../errors/duplicateEmailError");
+const ValidationError = require("../errors/validationError");
+const UnauthorizedError = require("../errors/unauthorizedError");
+const NotFoundError = require("../errors/notFoundError");
+const User = require("../models/user");
+
+function createUser(req, res, next) {
+  const { name, avatar, email, password } = req.body;
+  User.findOne({ email })
+    .then((user) => {
+      if (user) {
+        throw new DuplicateEmailError("Please use a different email");
+      }
+      return bcrypt.hash(password, 10);
+    })
+    .then((hash) => User.create({ name, avatar, email, password: hash }))
+    .then((user) => {
+      res.send({
+        email: user.email,
+        name: user.name,
+        avatar: user.avatar || "default avatar image",
+      });
     })
     .catch((err) => {
-      console.error(err);
       if (err.name === "ValidationError") {
-        return res.status(INVALID_DATA).send({ message: "Invalid data" });
+        return next(new ValidationError("Invalid data sent"));
       }
-      return res
-        .status(SERVER_ERROR)
-        .send({ message: "Error from createItem" });
+      if (err.name === "InvalidEmailError") {
+        return next(
+          new DuplicateEmailError("Please try a different email address.")
+        );
+      }
+      return next(err);
     });
-};
-const getItems = (req, res) => {
-  ClothingItem.find({})
-    .then((items) => res.status(REQUEST_SUCCESSFUL).send(items))
-    .catch((err) => {
-      console.error(err);
-      res
-        .status(SERVER_ERROR)
-        .send({ message: "An error has occured on the server." });
-    });
-};
+}
 
-const deleteItem = (req, res) => {
-  const { itemId } = req.params;
-  console.log(itemId);
-  ClothingItem.findById({ _id: itemId })
-    .orFail()
-    .then((item) => {
-      if (item.owner.toString() !== req.user._id.toString()) {
-        return res.status(FORBIDDEN_ERROR).send({
-          message: "You do not have sufficient privileges delete this item.",
-        });
-      }
-      return ClothingItem.findByIdAndDelete({ _id: itemId })
-        .orFail()
-        .then(() => res.status(200).send(item));
+function login(req, res, next) {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    return next(new ValidationError("Invalid data entered"));
+  }
+
+  return User.findUserByCredentials(email, password)
+    .then((user) => {
+      const token = jwt.sign({ _id: user._id }, JWT_SECRET, {
+        expiresIn: "7d",
+      });
+      res.send({ token });
     })
     .catch((err) => {
-      console.error(err);
-      if (err.name === "DocumentNotFoundError") {
-        return res.status(NOT_FOUND).send({ message: err.message });
+      if (err.message === "Incorrect email or password") {
+        return next(new UnauthorizedError("Incorrect email or password"));
       }
-      if (res.deletedCount === 0) {
-        return res.status(NOT_FOUND).send({ message: err.message });
-      }
-      if (err.name === "CastError") {
-        return res.status(INVALID_DATA).send({ message: "Invalid data" });
-      }
-      return res
-        .status(SERVER_ERROR)
-        .send({ message: "An error has occurred on the server." });
+      return next(err);
     });
-};
+}
 
-const likeItem = (req, res) => {
-  const { itemId } = req.params;
-  ClothingItem.findByIdAndUpdate(
-    itemId,
-    { $addToSet: { likes: req.user._id } },
-    { new: true }
+function getCurrentUser(req, res, next) {
+  const { _id } = req.user;
+
+  User.findById(_id)
+    .orFail()
+    .then((user) => {
+      res.send(user);
+    })
+    .catch((err) => {
+      if (err.name === "DocumentNotFoundError") {
+        return next(new NotFoundError("Requested resource not found."));
+      }
+      return next(err);
+    });
+}
+
+function updateUser(req, res, next) {
+  const { name, avatar } = req.body;
+  const { _id } = req.user;
+  User.findByIdAndUpdate(
+    _id,
+    { $set: { name, avatar } },
+    { runValidators: true, new: true }
   )
     .orFail()
-    .then((item) => res.status(REQUEST_SUCCESSFUL).send(item))
+    .then((user) => {
+      res.send(user);
+    })
     .catch((err) => {
-      console.error(err);
-      if (err.name === "DocumentNotFoundError") {
-        return res.status(NOT_FOUND).send({ message: err.message });
-      }
       if (err.name === "CastError") {
-        return res.status(INVALID_DATA).send({ message: "Invalid data" });
+        return next(new ValidationError("Invalid data entered"));
       }
-      return res
-        .status(SERVER_ERROR)
-        .send({ message: "An error has occurred on the server." });
-    });
-};
-
-const dislikeItem = (req, res) => {
-  const { itemId } = req.params;
-  ClothingItem.findByIdAndUpdate(
-    itemId,
-    { $pull: { likes: req.user._id } },
-    { new: true }
-  )
-    .orFail()
-    .then((item) => res.status(REQUEST_SUCCESSFUL).send(item))
-    .catch((err) => {
-      console.error(err);
       if (err.name === "DocumentNotFoundError") {
-        return res.status(NOT_FOUND).send({ message: err.message });
+        return next(new NotFoundError("Requested resource not found."));
       }
-      if (err.name === "CastError") {
-        return res.status(INVALID_DATA).send({ message: "Invalid data" });
+      if (err.name === "ValidationError") {
+        return next(new ValidationError("Invalid data entered"));
       }
-      return res
-        .status(SERVER_ERROR)
-        .send({ message: "An error has occurred on the server." });
+      return next(err);
     });
-};
+}
 
 module.exports = {
-  createItem,
-  getItems,
-  deleteItem,
-  likeItem,
-  dislikeItem,
+  createUser,
+  login,
+  getCurrentUser,
+  updateUser,
 };
