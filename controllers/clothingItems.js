@@ -1,74 +1,22 @@
-const bcrypt = require("bcryptjs");
-
-const jwt = require("jsonwebtoken");
-
-const JWT_SECRET = require("../utils/config");
-
-const DuplicateEmailError = require("../errors/duplicateEmailError");
-const ValidationError = require("../errors/validationError");
-const UnauthorizedError = require("../errors/unauthorizedError");
+const ClothingItem = require("../models/clothingItem");
 const NotFoundError = require("../errors/notFoundError");
-const User = require("../models/user");
+const ValidationError = require("../errors/validationError");
+const ForbiddenError = require("../errors/forbiddenError");
 
-function createUser(req, res, next) {
-  const { name, avatar, email, password } = req.body;
-  User.findOne({ email })
-    .then((user) => {
-      if (user) {
-        throw new DuplicateEmailError("Please use a different email");
-      }
-      return bcrypt.hash(password, 10);
+const getItems = (req, res, next) => {
+  ClothingItem.find({})
+    .then((items) => {
+      res.send({ data: items });
     })
-    .then((hash) => User.create({ name, avatar, email, password: hash }))
-    .then((user) => {
-      res.send({
-        email: user.email,
-        name: user.name,
-        avatar: user.avatar || "default avatar image",
-      });
-    })
-    .catch((err) => {
-      if (err.name === "ValidationError") {
-        return next(new ValidationError("Invalid data sent"));
-      }
-      if (err.name === "InvalidEmailError") {
-        return next(
-          new DuplicateEmailError("Please try a different email address.")
-        );
-      }
-      return next(err);
-    });
-}
+    .catch(next);
+};
 
-function login(req, res, next) {
-  const { email, password } = req.body;
-
-  if (!email || !password) {
-    return next(new ValidationError("Invalid data entered"));
-  }
-
-  return User.findUserByCredentials(email, password)
-    .then((user) => {
-      const token = jwt.sign({ _id: user._id }, JWT_SECRET, {
-        expiresIn: "7d",
-      });
-      res.send({ token });
-    })
-    .catch((err) => {
-      if (err.message === "Incorrect email or password") {
-        return next(new UnauthorizedError("Incorrect email or password"));
-      }
-      return next(err);
-    });
-}
-
-function getCurrentUser(req, res, next) {
-  const { _id } = req.user;
-
-  User.findById(_id)
+const getItem = (req, res, next) => {
+  const { itemId } = req.params;
+  ClothingItem.findById(itemId)
     .orFail()
-    .then((user) => {
-      res.send(user);
+    .then((item) => {
+      res.send(item);
     })
     .catch((err) => {
       if (err.name === "DocumentNotFoundError") {
@@ -76,37 +24,113 @@ function getCurrentUser(req, res, next) {
       }
       return next(err);
     });
-}
+};
 
-function updateUser(req, res, next) {
-  const { name, avatar } = req.body;
-  const { _id } = req.user;
-  User.findByIdAndUpdate(
-    _id,
-    { $set: { name, avatar } },
-    { runValidators: true, new: true }
+const createItem = (req, res, next) => {
+  const { name, weather, imageUrl } = req.body;
+
+  ClothingItem.create({ name, weather, imageUrl, owner: req.user._id })
+    .then((item) => {
+      res.status(201).send(item);
+    })
+    .catch((err) => {
+      if (err.name === "ValidationError") {
+        return next(new ValidationError("Invalid data entered"));
+      }
+      if (err.name === "CastError") {
+        return next(new ValidationError("Invalid data entered"));
+      }
+      return next(err);
+    });
+};
+
+const deleteItem = (req, res, next) => {
+  const { itemId } = req.params;
+  const currentUserId = req.user._id;
+
+  ClothingItem.findById(itemId)
+    .orFail()
+    .then((clothingItem) => {
+      const ownerId = clothingItem?.owner.toString();
+
+      if (!(currentUserId === ownerId)) {
+        return next(new ForbiddenError("You do not own this item."));
+      }
+
+      return ClothingItem.findByIdAndDelete(itemId).then((item) => {
+        res.send({ message: `deleted item with ID: ${item._id}` });
+      });
+    })
+    .catch((err) => {
+      if (err.name === "CastError") {
+        return next(new ValidationError("Invalid data entered."));
+      }
+      if (err.name === "DocumentNotFoundError") {
+        return next(new NotFoundError("Requested resource not found."));
+      }
+      return next(err);
+    });
+};
+
+const likeItem = (req, res, next) => {
+  const { itemId } = req.params;
+  const user = req.user._id;
+  ClothingItem.findByIdAndUpdate(
+    itemId,
+    {
+      $addToSet: { likes: user },
+    },
+    {
+      new: true,
+    }
   )
     .orFail()
-    .then((user) => {
-      res.send(user);
+    .then((item) => {
+      res.send({ data: item });
     })
     .catch((err) => {
       if (err.name === "CastError") {
         return next(new ValidationError("Invalid data entered"));
       }
       if (err.name === "DocumentNotFoundError") {
-        return next(new NotFoundError("Requested resource not found."));
-      }
-      if (err.name === "ValidationError") {
-        return next(new ValidationError("Invalid data entered"));
+        return next(new NotFoundError("Requested resource not found"));
       }
       return next(err);
     });
-}
+};
+
+const dislikeItem = (req, res, next) => {
+  const { itemId } = req.params;
+  const user = req.user._id;
+  ClothingItem.findByIdAndUpdate(
+    itemId,
+    {
+      $pull: { likes: user },
+    },
+    {
+      new: true,
+    }
+  )
+    .orFail()
+    .then((item) => {
+      res.send({ data: item });
+    })
+    .catch((err) => {
+      if (err.name === "CastError") {
+        return next(new ValidationError("Invalid data entered."));
+      }
+      if (err.name === "DocumentNotFoundError") {
+        return next(new NotFoundError("Requested resource not found"));
+      }
+      return next(err);
+    });
+};
 
 module.exports = {
-  createUser,
-  login,
-  getCurrentUser,
-  updateUser,
+  getItems,
+  getItem,
+  createItem,
+  deleteItem,
+  likeItem,
+  dislikeItem,
 };
