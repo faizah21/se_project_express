@@ -1,5 +1,8 @@
 # Description and Functionality
-
+Domain: 
+  api.wtwrr.strangled.net	
+	wtwrr.strangled.net	
+	www.wtwrr.strangled.net
 Created a back-end server and initialized the database to store user and clothing item data.
 Utilized controllers, models, schemas, and routes
 Configured routes and controllers and handled errors.
